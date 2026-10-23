@@ -1,15 +1,13 @@
 """
-Streamlit Web Application: HR Policy Assistant — RAG Chatbot.
-
-A Dribbble-grade, premium UI/UX experience for querying the Enso Group HR Policy Manual.
-Features ambient aura glows, glassmorphic frosted cards, responsive typography,
-and strict hallucination-free answering.
+HR Policy Assistant — Enso Group RAG Chatbot
+Web Application built with Streamlit, LangChain, ChromaDB & Google Gemini.
+Exact replica of the high-fidelity UI mockup.
 """
 
 import sys
+import textwrap
 from pathlib import Path
 import streamlit as st
-from PIL import Image
 
 # Setup paths
 BASE_DIR = Path(__file__).resolve().parent
@@ -21,447 +19,605 @@ from rag_pipeline import query_hr_assistant
 
 # Page Configuration
 st.set_page_config(
-    page_title="HR Policy Intelligence — Enso Group",
-    page_icon="✨",
+    page_title="HR Policy Assistant — Enso Group",
+    page_icon="💬",
     layout="wide",
-    initial_sidebar_state="expanded",
+    initial_sidebar_state="collapsed",
 )
 
-# Dribbble-Grade Custom Styling (Obsidian / Aurora Glassmorphism)
-st.markdown(
+
+def render_html(html_str: str):
+    """Render HTML safely without markdown code-block triggers."""
+    clean_html = "\n".join(line.strip() for line in html_str.splitlines() if line.strip())
+    st.markdown(clean_html, unsafe_allow_html=True)
+
+
+# Custom High-Fidelity CSS matching user's exact mockup
+render_html(
     """
     <style>
-    @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:ital,wght@0,300;0,400;0,500;0,600;0,700;0,800;1,400&family=JetBrains+Mono:wght@400;500;600&display=swap');
+    @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
 
-    /* Global Typography & Background Aura */
     html, body, [class*="css"] {
         font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif !important;
     }
 
+    /* Soft Pastel Blue Gradient Background */
     .stApp {
-        background: radial-gradient(circle at 10% 10%, rgba(99, 102, 241, 0.15) 0%, transparent 35%),
-                    radial-gradient(circle at 90% 20%, rgba(236, 72, 153, 0.12) 0%, transparent 35%),
-                    radial-gradient(circle at 50% 90%, rgba(14, 165, 233, 0.10) 0%, transparent 45%),
-                    #090D16 !important;
-        color: #F1F5F9 !important;
+        background: radial-gradient(circle at 10% 12%, #E4EFF9 0%, #F5F8FC 45%, #EBF1F9 100%) !important;
+        color: #1E293B !important;
     }
 
-    /* Top Padding Adjustment */
+    /* Container constraints */
     .block-container {
-        padding-top: 2rem !important;
-        padding-bottom: 3rem !important;
-        max-width: 1200px !important;
+        padding-top: 3.2rem !important;
+        padding-bottom: 2rem !important;
+        max-width: 1220px !important;
     }
 
-    /* Sidebar Glass Panel */
-    section[data-testid="stSidebar"] {
-        background: rgba(13, 18, 32, 0.85) !important;
-        backdrop-filter: blur(20px) !important;
-        border-right: 1px solid rgba(255, 255, 255, 0.08) !important;
+    /* Hide default Streamlit headers, menus, deploy button and footers */
+    header[data-testid="stHeader"], 
+    [data-testid="stToolbar"], 
+    [data-testid="stAppDeployButton"], 
+    #MainMenu, 
+    footer {
+        display: none !important;
+        visibility: hidden !important;
     }
 
-    /* Header Gradient & Badge */
-    .brand-pill {
-        display: inline-flex;
-        align-items: center;
-        gap: 0.5rem;
-        background: rgba(99, 102, 241, 0.12);
-        color: #A5B4FC;
-        font-size: 0.78rem;
-        font-weight: 700;
-        letter-spacing: 0.08em;
-        text-transform: uppercase;
-        padding: 0.35rem 0.85rem;
-        border-radius: 9999px;
-        border: 1px solid rgba(99, 102, 241, 0.3);
-        margin-bottom: 0.75rem;
-    }
-
-    .hero-title {
-        font-size: 2.5rem;
-        font-weight: 800;
-        line-height: 1.15;
-        letter-spacing: -0.03em;
-        margin-bottom: 0.6rem;
-        background: linear-gradient(135deg, #FFFFFF 0%, #E2E8F0 50%, #A5B4FC 100%);
-        -webkit-background-clip: text;
-        -webkit-text-fill-color: transparent;
-    }
-
-    .hero-subtitle {
-        font-size: 1.05rem;
-        line-height: 1.6;
-        color: #94A3B8;
-        font-weight: 400;
-        margin-bottom: 1.25rem;
-    }
-
-    .metrics-row {
+    /* LEFT COLUMN STYLING */
+    .brand-wrap {
         display: flex;
-        gap: 0.75rem;
-        flex-wrap: wrap;
-        margin-bottom: 1.5rem;
-    }
-
-    .metric-chip {
-        display: inline-flex;
         align-items: center;
-        gap: 0.4rem;
-        background: rgba(255, 255, 255, 0.04);
-        border: 1px solid rgba(255, 255, 255, 0.08);
-        border-radius: 8px;
-        padding: 0.35rem 0.75rem;
-        font-size: 0.82rem;
-        font-weight: 500;
-        color: #CBD5E1;
+        gap: 14px;
+        margin-bottom: 2.5rem;
     }
 
-    /* Hero Banner Image Card */
-    .hero-image-card {
-        border-radius: 16px;
-        overflow: hidden;
-        border: 1px solid rgba(255, 255, 255, 0.12);
-        box-shadow: 0 20px 40px -15px rgba(0, 0, 0, 0.6),
-                    0 0 25px rgba(99, 102, 241, 0.15);
-        transition: transform 0.3s ease;
+    .enso-logo-title {
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+        color: #0B2545;
+        font-size: 1.85rem;
+        font-weight: 700;
+        line-height: 1;
+        letter-spacing: -0.02em;
     }
 
-    .hero-image-card img {
-        width: 100%;
-        height: 100%;
-        object-fit: cover;
-        display: block;
+    .enso-logo-subtitle {
+        font-size: 0.68rem;
+        font-weight: 700;
+        letter-spacing: 0.22em;
+        color: #475569;
+        margin-top: 3px;
     }
 
-    /* Floating Glass Search Box */
-    div[data-testid="stForm"] {
-        background: rgba(15, 23, 42, 0.65) !important;
-        backdrop-filter: blur(16px) !important;
-        border: 1px solid rgba(255, 255, 255, 0.1) !important;
-        border-radius: 16px !important;
-        padding: 1.5rem !important;
-        box-shadow: 0 15px 35px -10px rgba(0, 0, 0, 0.5) !important;
-        margin-top: 1rem !important;
-        margin-bottom: 1.5rem !important;
+    .main-title {
+        font-size: 3.1rem;
+        font-weight: 800;
+        line-height: 1.12;
+        color: #0F2B48;
+        letter-spacing: -0.035em;
+        margin-bottom: 1.35rem;
     }
 
-    /* Input Field Styling */
-    div[data-testid="stTextInput"] input {
-        background: rgba(10, 14, 26, 0.75) !important;
-        color: #F8FAFC !important;
-        border: 1px solid rgba(255, 255, 255, 0.12) !important;
-        border-radius: 10px !important;
-        padding: 0.85rem 1rem !important;
-        font-size: 1.02rem !important;
-        transition: all 0.25s ease !important;
+    .subtitle-desc {
+        font-size: 1.05rem;
+        line-height: 1.55;
+        color: #475569;
+        font-weight: 400;
+        margin-bottom: 2.5rem;
+        max-width: 360px;
     }
 
-    div[data-testid="stTextInput"] input:focus {
-        border-color: #6366F1 !important;
-        box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.25) !important;
+    .feature-item {
+        display: flex;
+        align-items: center;
+        gap: 18px;
+        margin-bottom: 1.6rem;
     }
 
-    /* Primary Search Button */
-    div[data-testid="stFormSubmitButton"] > button[kind="primaryFormSubmit"] {
-        background: linear-gradient(135deg, #6366F1 0%, #4F46E5 50%, #4338CA 100%) !important;
-        color: #FFFFFF !important;
+    .feature-icon-box {
+        width: 36px;
+        height: 36px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        flex-shrink: 0;
+    }
+
+    .feature-text {
+        font-size: 0.96rem;
+        font-weight: 600;
+        color: #1E293B;
+        line-height: 1.25;
+    }
+
+    /* RIGHT COLUMN STYLING (TARGET TOP-LEVEL COLUMN ONLY) */
+    [data-testid="stHorizontalBlock"]:not([data-testid="stForm"] *) > [data-testid="stColumn"]:nth-of-type(2) {
+        background: #FFFFFF !important;
+        border: 1px solid #E2E8F0 !important;
+        border-radius: 24px !important;
+        box-shadow: 0 10px 30px rgba(15, 43, 72, 0.05), 0 2px 6px rgba(0, 0, 0, 0.02) !important;
+        padding: 26px 32px 24px 32px !important;
+        min-height: 560px !important;
+    }
+
+    /* RESET NESTED FORM COLUMNS */
+    [data-testid="stForm"] [data-testid="stColumn"] {
+        background: transparent !important;
         border: none !important;
-        border-radius: 10px !important;
-        padding: 0.75rem 1.75rem !important;
-        font-weight: 600 !important;
-        font-size: 0.98rem !important;
-        box-shadow: 0 6px 20px -3px rgba(99, 102, 241, 0.5) !important;
-        transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1) !important;
+        border-radius: 0 !important;
+        box-shadow: none !important;
+        min-height: unset !important;
+        padding: 0 !important;
     }
 
-    div[data-testid="stFormSubmitButton"] > button[kind="primaryFormSubmit"]:hover {
-        transform: translateY(-2px) !important;
-        box-shadow: 0 10px 25px -3px rgba(99, 102, 241, 0.7) !important;
-    }
-
-    /* Clear Button */
-    div[data-testid="stFormSubmitButton"] > button:not([kind="primaryFormSubmit"]) {
-        background: rgba(255, 255, 255, 0.05) !important;
-        color: #94A3B8 !important;
-        border: 1px solid rgba(255, 255, 255, 0.1) !important;
-        border-radius: 10px !important;
-        font-weight: 500 !important;
-        transition: all 0.2s ease !important;
-    }
-
-    div[data-testid="stFormSubmitButton"] > button:not([kind="primaryFormSubmit"]):hover {
-        background: rgba(255, 255, 255, 0.1) !important;
-        color: #F8FAFC !important;
-    }
-
-    /* Verified Answer Glass Card */
-    .verified-card {
-        background: linear-gradient(135deg, rgba(30, 41, 59, 0.7) 0%, rgba(15, 23, 42, 0.7) 100%);
-        border: 1px solid rgba(99, 102, 241, 0.3);
-        border-left: 5px solid #6366F1;
-        border-radius: 16px;
-        padding: 1.75rem;
-        margin-top: 1.25rem;
-        margin-bottom: 1rem;
-        backdrop-filter: blur(16px);
-        box-shadow: 0 15px 35px -5px rgba(0, 0, 0, 0.4);
-    }
-
-    .card-topbar {
+    .chat-header {
         display: flex;
         justify-content: space-between;
         align-items: center;
-        margin-bottom: 1rem;
+        padding-bottom: 18px;
+        border-bottom: 1px solid #F1F5F9;
+        margin-bottom: 22px;
+        width: 100%;
     }
 
-    .badge-verified-pill {
-        display: inline-flex;
+    .chat-header-title {
+        display: flex;
         align-items: center;
-        gap: 0.4rem;
-        background: rgba(16, 185, 129, 0.15);
-        color: #34D399;
-        font-size: 0.82rem;
+        gap: 12px;
+        font-size: 1.18rem;
         font-weight: 700;
-        padding: 0.35rem 0.85rem;
-        border-radius: 9999px;
-        border: 1px solid rgba(16, 185, 129, 0.3);
-        letter-spacing: 0.02em;
+        color: #0F2B48;
     }
 
-    .verified-answer {
-        font-size: 1.22rem;
-        line-height: 1.75;
+    .chat-header-status {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        font-size: 0.85rem;
         font-weight: 500;
-        color: #F8FAFC;
-        margin-bottom: 1.25rem;
-        letter-spacing: -0.01em;
+        color: #475569;
     }
 
-    .reference-pill {
-        display: inline-flex;
-        align-items: center;
-        gap: 0.5rem;
-        background: rgba(99, 102, 241, 0.15);
-        color: #C7D2FE;
-        font-size: 0.92rem;
-        font-weight: 600;
-        padding: 0.5rem 1rem;
-        border-radius: 10px;
-        border: 1px solid rgba(99, 102, 241, 0.3);
-    }
-
-    /* Minimalist Strict 'Not found' Display */
-    .not-found-container {
-        background: linear-gradient(135deg, rgba(30, 25, 35, 0.65) 0%, rgba(20, 15, 25, 0.65) 100%);
-        border: 1px solid rgba(239, 68, 68, 0.3);
-        border-left: 5px solid #EF4444;
-        border-radius: 16px;
-        padding: 1.5rem 1.75rem;
-        margin-top: 1.25rem;
-        margin-bottom: 1rem;
-        backdrop-filter: blur(16px);
-    }
-
-    .not-found-heading {
-        font-size: 1.45rem;
-        font-weight: 700;
-        color: #F87171;
-        letter-spacing: -0.02em;
-        margin: 0;
-    }
-
-    /* Excerpt Box */
-    .excerpt-dark {
-        font-family: 'JetBrains Mono', monospace;
-        font-size: 0.88rem;
-        background: #060911;
-        color: #94A3B8;
-        border: 1px solid rgba(255, 255, 255, 0.08);
-        border-radius: 10px;
-        padding: 1.15rem;
-        line-height: 1.6;
-        white-space: pre-wrap;
-    }
-
-    /* Pulsing Status Dot */
-    .pulse-dot {
+    .status-dot-green {
         width: 8px;
         height: 8px;
-        background: #10B981;
         border-radius: 50%;
+        background-color: #10B981;
         display: inline-block;
-        box-shadow: 0 0 10px #10B981;
+    }
+
+    /* CHAT MESSAGES CONTAINER */
+    .chat-messages-container {
+        display: flex;
+        flex-direction: column;
+        gap: 20px;
+        margin-bottom: 22px;
+        width: 100%;
+    }
+
+    /* User Message Bubble */
+    .user-msg-row {
+        display: flex;
+        justify-content: flex-end;
+        align-items: flex-start;
+        gap: 12px;
+        width: 100%;
+    }
+
+    .user-bubble {
+        background: #E0ECFF;
+        color: #1E3A8A;
+        border-radius: 16px 16px 4px 16px;
+        padding: 13px 18px;
+        font-size: 0.94rem;
+        line-height: 1.48;
+        font-weight: 500;
+        max-width: 82%;
+    }
+
+    .avatar-user {
+        width: 36px;
+        height: 36px;
+        border-radius: 50%;
+        background: #DBEAFE;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        flex-shrink: 0;
+    }
+
+    /* Bot Message Bubble */
+    .bot-msg-row {
+        display: flex;
+        justify-content: flex-start;
+        align-items: flex-start;
+        gap: 12px;
+        width: 100%;
+    }
+
+    .avatar-bot {
+        width: 36px;
+        height: 36px;
+        border-radius: 50%;
+        background: #EFF6FF;
+        border: 1px solid #DBEAFE;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        flex-shrink: 0;
+    }
+
+    .bot-content-wrap {
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+        max-width: 88%;
+    }
+
+    .bot-answer-text {
+        font-size: 0.96rem;
+        line-height: 1.55;
+        color: #1E293B;
+        font-weight: 400;
+    }
+
+    /* Nested Reference Card */
+    .reference-subcard {
+        background: #F1F6FC;
+        border: 1px solid #E2EBF6;
+        border-radius: 14px;
+        padding: 13px 16px;
+    }
+
+    .reference-title-line {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        font-size: 0.84rem;
+        font-weight: 700;
+        color: #1E40AF;
+        margin-bottom: 2px;
+    }
+
+    .reference-page-text {
+        font-size: 0.86rem;
+        color: #1E3A8A;
+        font-weight: 500;
+        margin-bottom: 8px;
+    }
+
+    .reference-divider {
+        height: 1px;
+        background-color: #E2E8F0;
+        margin: 6px 0 8px 0;
+    }
+
+    .source-excerpt-heading {
+        font-size: 0.82rem;
+        font-weight: 700;
+        color: #1E40AF;
+        margin-bottom: 2px;
+    }
+
+    .source-excerpt-text {
+        font-size: 0.85rem;
+        font-style: italic;
+        color: #334155;
+        line-height: 1.45;
+    }
+
+    /* Strict Not Found Bubble */
+    .not-found-bubble {
+        background: #FEF2F2;
+        border: 1px solid #FEE2E2;
+        border-radius: 12px;
+        padding: 12px 18px;
+        font-size: 1.02rem;
+        font-weight: 700;
+        color: #991B1B;
+    }
+
+    /* Form and Inputs */
+    div[data-testid="stForm"] {
+        border: none !important;
+        background: transparent !important;
+        padding: 0 !important;
+        margin-top: 10px !important;
+    }
+
+    div[data-testid="stTextInput"] input {
+        background: #FFFFFF !important;
+        color: #1E293B !important;
+        border: 1.5px solid #E2E8F0 !important;
+        border-radius: 12px !important;
+        padding: 12px 16px !important;
+        font-size: 0.95rem !important;
+        height: 48px !important;
+    }
+
+    div[data-testid="stTextInput"] input:focus {
+        border-color: #2563EB !important;
+        box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.2) !important;
+    }
+
+    /* Send Button */
+    div[data-testid="stFormSubmitButton"] > button {
+        background: #2563EB !important;
+        color: #FFFFFF !important;
+        border: none !important;
+        border-radius: 12px !important;
+        height: 48px !important;
+        padding: 0 20px !important;
+        font-weight: 600 !important;
+        font-size: 0.95rem !important;
+        display: flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+        transition: all 0.2s ease !important;
+        box-shadow: 0 4px 12px rgba(37, 99, 235, 0.25) !important;
+    }
+
+    div[data-testid="stFormSubmitButton"] > button p {
+        color: #FFFFFF !important;
+        font-size: 0.95rem !important;
+        font-weight: 600 !important;
+        margin: 0 !important;
+    }
+
+    div[data-testid="stFormSubmitButton"] > button:hover {
+        background: #1D4ED8 !important;
+        transform: translateY(-1px);
+        box-shadow: 0 6px 16px rgba(37, 99, 235, 0.35) !important;
+    }
+
+    .disclaimer-caption {
+        font-size: 0.78rem;
+        color: #94A3B8;
+        display: flex;
+        align-items: center;
+        gap: 5px;
+        margin-top: 8px;
+    }
+
+    /* SITE FOOTER */
+    .site-footer {
+        text-align: center;
+        margin-top: 3.5rem;
+        padding-top: 1.5rem;
+        font-size: 0.95rem;
+        font-weight: 500;
+        color: #475569;
+        letter-spacing: 0.01em;
+    }
+
+    .site-footer span.heart {
+        color: #EF4444;
+        display: inline-block;
+        margin: 0 4px;
+        font-size: 1.1rem;
     }
     </style>
     """,
-    unsafe_allow_html=True,
 )
 
 # Initialize Session State
-if "current_response" not in st.session_state:
-    st.session_state.current_response = None
+if "chat_history" not in st.session_state:
+    st.session_state.chat_history = [
+        {
+            "query": "How many days of Privilege Leave (PL) does a permanent employee get per year?",
+            "answer": "Permanent employees are entitled to 12 days of Privilege Leave (PL) per year.",
+            "reference": "Page 60 – Leave Policy (Section: Privilege Leave)",
+            "excerpt": "Permanent employees are eligible for 12 days of Privilege Leave (PL) per year.",
+            "is_found": True,
+        }
+    ]
 
+# Layout Columns
+left_col, right_col = st.columns([0.38, 0.62], gap="large")
 
-def clear_query():
-    """Reset question and response state."""
-    st.session_state.current_response = None
-
-
-# Sidebar Configuration
-with st.sidebar:
-    st.markdown("### 🏢 Policy Intelligence")
-    st.caption("Enso Group Corporate Knowledge Engine")
-    st.markdown("---")
-
-    st.markdown("#### ⚡ System Status")
-    st.markdown(
+# LEFT COLUMN: Branding & Features
+with left_col:
+    render_html(
         """
-        <div style="background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.08); border-radius: 10px; padding: 0.85rem; margin-bottom: 1rem;">
-            <div style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.5rem;">
-                <span class="pulse-dot"></span>
-                <span style="font-size: 0.85rem; font-weight: 600; color: #E2E8F0;">RAG Pipeline Active</span>
+        <div class="brand-wrap">
+            <svg width="48" height="48" viewBox="0 0 48 48" fill="none">
+                <circle cx="24" cy="24" r="17" stroke="#0F2B48" stroke-width="7" stroke-dasharray="84 25" stroke-linecap="round"/>
+                <circle cx="35" cy="13" r="3.5" fill="#3B82F6"/>
+            </svg>
+            <div>
+                <div class="enso-logo-title">Enso</div>
+                <div class="enso-logo-subtitle">GROUP</div>
             </div>
-            <div style="font-size: 0.78rem; color: #94A3B8;">Zero-hallucination guardrails enabled</div>
         </div>
-        """,
-        unsafe_allow_html=True,
-    )
 
-    st.markdown("#### 🛠️ Technology Stack")
-    st.markdown(
-        """
-        - **LLM Engine:** Google Gemini
-        - **Embeddings:** `gemini-embedding-001` (3072-dim)
-        - **Vector Base:** ChromaDB Persistent
-        - **Pipeline:** LangChain LCEL Runnable
-        - **PDF Parser:** PyMuPDF Engine
-        """
-    )
-
-    st.markdown("---")
-    st.markdown("#### 📄 Document Health")
-    if config.PDF_PATH.exists():
-        st.success(f"Loaded: `{config.PDF_PATH.name}` (79 Pages)")
-    else:
-        st.error("Missing: `hr_manual.pdf`")
-
-    st.markdown("#### 🔑 API Connection")
-    if config.validate_api_key():
-        st.success("Gemini API connected")
-    else:
-        st.error("API Key not found in `.env`")
-
-
-# Main Page Content: Dribbble Split Hero Layout
-hero_col1, hero_col2 = st.columns([1.15, 0.85], gap="large")
-
-with hero_col1:
-    st.markdown("<div class='brand-pill'>✦ Enso Group HR Assistant</div>", unsafe_allow_html=True)
-    st.markdown("<div class='hero-title'>HR Policy Intelligence</div>", unsafe_allow_html=True)
-    st.markdown(
-        "<div class='hero-subtitle'>Get immediate, legally grounded answers about leaves, probation periods, benefits, travel policies, and corporate conduct directly from the official 79-page manual.</div>",
-        unsafe_allow_html=True,
-    )
-
-    st.markdown(
-        """
-        <div class='metrics-row'>
-            <div class='metric-chip'>📄 79 Official Pages</div>
-            <div class='metric-chip'>🔒 100% Document Grounded</div>
-            <div class='metric-chip'>⚡ Zero Hallucinations</div>
+        <div class="main-title">
+            HR Policy<br>Assistant
         </div>
-        """,
-        unsafe_allow_html=True,
-    )
 
-with hero_col2:
-    banner_path = BASE_DIR / "data" / "hr_banner.jpg"
-    if banner_path.exists():
-        try:
-            banner_img = Image.open(banner_path)
-            st.image(banner_img, use_container_width=True)
-        except Exception:
-            pass
+        <div class="subtitle-desc">
+            Get quick answers to your HR policy questions from the Enso Group HR Manual.
+        </div>
 
-# Pre-flight Checks
-if not config.validate_api_key():
-    st.error("⚠️ **API Key Required:** Please configure `GEMINI_API_KEY` in your `.env` file.")
-    st.stop()
-
-if not config.PDF_PATH.exists():
-    st.error("⚠️ **Document Missing:** `hr_manual.pdf` not found in `data/`.")
-    st.stop()
-
-if not config.CHROMA_DIR.exists():
-    st.warning("⚠️ **Database Required:** Please run `python ingest.py` in your terminal.")
-    st.stop()
-
-# Floating Search & Query Box
-with st.form("qa_form", clear_on_submit=False):
-    st.markdown("<span style='font-size: 0.88rem; font-weight: 600; color: #CBD5E1;'>Search Corporate Policy:</span>", unsafe_allow_html=True)
-    user_query = st.text_input(
-        "Search Corporate Policy:",
-        placeholder="e.g. How many days of Privilege Leave (PL) does a permanent employee get per year?",
-        key="query_text_input",
-        label_visibility="collapsed",
-    )
-    col_ask, col_clear, _ = st.columns([1.5, 1.2, 5])
-    with col_ask:
-        submit_btn = st.form_submit_button("Ask Policy Assistant ✨", use_container_width=True, type="primary")
-    with col_clear:
-        clear_btn = st.form_submit_button("Clear", use_container_width=True, on_click=clear_query)
-
-if submit_btn and user_query.strip():
-    with st.spinner("Synthesizing verified answer from manual..."):
-        response = query_hr_assistant(user_query.strip())
-        st.session_state.current_response = response
-
-# Display Current Response
-if st.session_state.current_response:
-    resp = st.session_state.current_response
-    st.markdown("---")
-
-    if not resp.get("is_found") or resp.get("answer", "").strip().lower() == "not found":
-        # Strict Minimalist 'Not found'
-        st.markdown(
-            """
-            <div class='not-found-container'>
-                <div class='not-found-heading'>Not found</div>
+        <div class="feature-item">
+            <div class="feature-icon-box">
+                <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#2563EB" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+                    <path d="m9 12 2 2 4-4"/>
+                </svg>
             </div>
-            """,
-            unsafe_allow_html=True,
-        )
-    else:
-        # Verified Answer Dribbble Glass Card
-        answer_text = resp["answer"].replace("\n", "<br>")
-        ref_text = resp["reference"]
-        st.markdown(
-            f"""
-            <div class='verified-card'>
-                <div class='card-topbar'>
-                    <span class='badge-verified-pill'>✓ Verified from HR Manual</span>
-                    <span class='reference-pill'>📖 {ref_text}</span>
+            <div class="feature-text">Accurate<br>Information</div>
+        </div>
+
+        <div class="feature-item">
+            <div class="feature-icon-box">
+                <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#2563EB" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H20v20H6.5a2.5 2.5 0 0 1-2.5-2.5Z"/>
+                    <path d="M6 2v20"/>
+                </svg>
+            </div>
+            <div class="feature-text">Direct from<br>HR Manual</div>
+        </div>
+
+        <div class="feature-item">
+            <div class="feature-icon-box">
+                <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#2563EB" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/>
+                </svg>
+            </div>
+            <div class="feature-text">Fast & Easy<br>Access</div>
+        </div>
+        """
+    )
+
+# RIGHT COLUMN: Chat Card
+with right_col:
+    # 1. Header
+    render_html(
+        """
+        <div class="chat-header">
+            <div class="chat-header-title">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#0F2B48" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+                    <circle cx="9" cy="10" r="1" fill="#0F2B48"/>
+                    <circle cx="15" cy="10" r="1" fill="#0F2B48"/>
+                </svg>
+                <span>HR Policy Assistant</span>
+            </div>
+            <div class="chat-header-status">
+                <span class="status-dot-green"></span>
+                <span>Connected to HR Manual</span>
+            </div>
+        </div>
+        """
+    )
+
+    # 2. Messages Display
+    for item in st.session_state.chat_history:
+        q = item.get("query", "")
+        ans = item.get("answer", "")
+        ref = item.get("reference", "")
+        excerpt = item.get("excerpt", "")
+        is_found = item.get("is_found", True)
+
+        # User Message
+        if q:
+            render_html(
+                f"""
+                <div class="user-msg-row">
+                    <div class="user-bubble">{q}</div>
+                    <div class="avatar-user">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="#2563EB">
+                            <path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/>
+                        </svg>
+                    </div>
                 </div>
-                <div class='verified-answer'>{answer_text}</div>
-            </div>
-            """,
-            unsafe_allow_html=True,
-        )
+                """
+            )
 
-        # Supporting Excerpts Drawer
-        if resp.get("sources"):
-            with st.expander("📚 View Supporting Source Citations & Excerpts", expanded=False):
-                for idx, src in enumerate(resp["sources"][:3]):
-                    page_num = src.get("page", "Unknown")
-                    section_title = src.get("section", "HR Manual")
-                    content = src.get("content", "").strip()
-                    st.markdown(f"**Clause #{idx + 1} — Page {page_num} • `{section_title}`**")
-                    st.markdown(f"<div class='excerpt-dark'>{content}</div>", unsafe_allow_html=True)
-                    st.markdown("")
+        # Bot Message
+        if not is_found or ans.strip().lower() == "not found":
+            render_html(
+                """
+                <div class="bot-msg-row">
+                    <div class="avatar-bot">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#2563EB" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <rect x="3" y="11" width="18" height="10" rx="2"/>
+                            <circle cx="12" cy="5" r="2"/>
+                            <path d="M12 7v4"/>
+                            <line x1="8" y1="16" x2="8.01" y2="16"/>
+                            <line x1="16" y1="16" x2="16.01" y2="16"/>
+                        </svg>
+                    </div>
+                    <div class="not-found-bubble">Not found</div>
+                </div>
+                """
+            )
+        else:
+            excerpt_html = ""
+            if excerpt:
+                excerpt_html = f"""
+                <div class="reference-divider"></div>
+                <div class="source-excerpt-heading">Source Excerpt:</div>
+                <div class="source-excerpt-text">&ldquo;{excerpt}&rdquo;</div>
+                """
 
-# Sleek Minimalist Footer
-st.markdown("---")
-st.markdown(
-    "<center><small style='color: #64748B; font-size: 0.8rem;'>Enso Group HR Assistant • College Midterm Project • Built with LangChain, ChromaDB & Google Gemini</small></center>",
-    unsafe_allow_html=True,
+            render_html(
+                f"""
+                <div class="bot-msg-row">
+                    <div class="avatar-bot">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#2563EB" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <rect x="3" y="11" width="18" height="10" rx="2"/>
+                            <circle cx="12" cy="5" r="2"/>
+                            <path d="M12 7v4"/>
+                            <line x1="8" y1="16" x2="8.01" y2="16"/>
+                            <line x1="16" y1="16" x2="16.01" y2="16"/>
+                        </svg>
+                    </div>
+                    <div class="bot-content-wrap">
+                        <div class="bot-answer-text">{ans}</div>
+                        <div class="reference-subcard">
+                            <div class="reference-title-line">
+                                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#1E40AF" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                                    <polyline points="14 2 14 8 20 8"/>
+                                </svg>
+                                <span>Reference:</span>
+                            </div>
+                            <div class="reference-page-text">{ref}</div>
+                            {excerpt_html}
+                        </div>
+                    </div>
+                </div>
+                """
+            )
+
+    # 3. Input Form
+    with st.form("input_chat_form", clear_on_submit=True):
+        input_col, send_col = st.columns([0.82, 0.18], gap="small")
+        with input_col:
+            user_input = st.text_input(
+                "Type your question here...",
+                placeholder="Type your question here...",
+                label_visibility="collapsed",
+            )
+        with send_col:
+            send_btn = st.form_submit_button("✈ Send", use_container_width=True)
+
+    # 4. Disclaimer
+    render_html(
+        """
+        <div class="disclaimer-caption">
+            <span>ⓘ</span>
+            <span>Answers are based only on the Enso Group HR Manual.</span>
+        </div>
+        """
+    )
+
+# SITE FOOTER
+render_html(
+    """
+    <div class="site-footer">
+        Made with <span class="heart">❤️</span> by Debojit
+    </div>
+    """
 )
+
+# Handle Submission
+if send_btn and user_input and user_input.strip():
+    with st.spinner(""):
+        res = query_hr_assistant(user_input.strip())
+        top_excerpt = ""
+        if res.get("sources"):
+            top_excerpt = res["sources"][0].get("content", "")[:220].strip()
+
+        st.session_state.chat_history.append(
+            {
+                "query": user_input.strip(),
+                "answer": res["answer"],
+                "reference": res["reference"],
+                "excerpt": top_excerpt,
+                "is_found": res["is_found"],
+            }
+        )
+        st.rerun()
