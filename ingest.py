@@ -1,146 +1,207 @@
-import os
-import sys
-import glob
-import time
-import hashlib
-from dotenv import load_dotenv
+"""
+PDF Ingestion Pipeline for HR Policy Assistant.
 
-from langchain_community.document_loaders import PyPDFLoader
+Loads hr_manual.pdf, extracts text page-by-page preserving accurate page numbers
+and policy section headings in metadata, splits into overlapping chunks, generates
+Google Gemini embeddings, and stores them persistently in ChromaDB.
+"""
+
+import sys
+import time
+import shutil
+import re
+from pathlib import Path
+from typing import List
+
+import pymupdf
+from langchain_core.documents import Document
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_google_genai import GoogleGenerativeAIEmbeddings
-from langchain_chroma import Chroma  # pip install langchain-chroma
+from langchain_chroma import Chroma
 
-# Load environment variables (e.g., GOOGLE_API_KEY from .env)
-load_dotenv()
-
-CHUNK_SIZE = 800
-CHUNK_OVERLAP = 100
-BATCH_SIZE = 50
-MAX_ATTEMPTS = 5
-PERSIST_DIR = "db"
-
-# Error substrings that are worth retrying (rate limits, temporary network/server issues)
-RETRYABLE_MARKERS = (
-    "RESOURCE_EXHAUSTED",
-    "429",
-    "503",
-    "UNAVAILABLE",
-    "DEADLINE_EXCEEDED",
-    "timeout",
-    "timed out",
-    "connection",
-)
+import config
 
 
-def is_rate_limit(err: str) -> bool:
-    return "RESOURCE_EXHAUSTED" in err or "429" in err
+def extract_section_header(text: str, current_section: str) -> str:
+    """
+    Heuristically detect section headings from page text to attach to chunk metadata.
+    Preserves existing section if no new heading is discovered.
+    """
+    lines = [line.strip() for line in text.split("\n") if line.strip()]
+    for line in lines[:8]:
+        if re.match(r"^(SECTION\s*[-–—]\s*[IVXLCDM]+)", line, re.IGNORECASE):
+            return line
+        if re.match(r"^(\[[A-Z]\]\s+[A-Za-z\s]+)", line):
+            return line
+        if re.match(r"^(Annexure\s*[-–—]?\s*[IVXLCDM]+)", line, re.IGNORECASE):
+            return line
+        if re.match(r"^\d+\.\d+\s+[A-Za-z\s]+", line):
+            return line
+        if "policy" in line.lower() and len(line) < 45 and not line.lower().startswith("this"):
+            return line
+    return current_section
 
 
-def is_retryable(err: str) -> bool:
-    err_lower = err.lower()
-    return any(marker.lower() in err_lower for marker in RETRYABLE_MARKERS)
+def load_pdf_documents(pdf_path: Path) -> List[Document]:
+    """
+    Loads text from each page of the PDF file and returns a list of Document objects
+    with accurate 1-indexed page numbers and section headers in the metadata.
+    """
+    if not pdf_path.exists():
+        raise FileNotFoundError(
+            f"PDF file not found at: {pdf_path}\n"
+            f"Please ensure 'hr_manual.pdf' is placed inside the 'data/' directory."
+        )
+
+    try:
+        doc = pymupdf.open(str(pdf_path))
+    except Exception as e:
+        raise RuntimeError(f"Failed to open PDF file '{pdf_path}': {e}")
+
+    total_pages = len(doc)
+    if total_pages == 0:
+        raise ValueError(f"The PDF file '{pdf_path}' is empty (0 pages).")
+
+    print(f"📖 Loading PDF '{pdf_path.name}' with {total_pages} pages...")
+
+    documents = []
+    current_section = "General HR Policy"
+
+    for page_idx in range(total_pages):
+        page = doc[page_idx]
+        page_num = page_idx + 1  # 1-indexed page number matching PDF viewer
+        text = page.get_text()
+
+        if not text or not text.strip():
+            print(f"⚠️  Warning: Page {page_num} contains no extractable text.")
+            continue
+
+        current_section = extract_section_header(text, current_section)
+
+        # Create LangChain Document with rich metadata
+        doc_obj = Document(
+            page_content=text,
+            metadata={
+                "source": pdf_path.name,
+                "page": page_num,
+                "section": current_section,
+                "total_pages": total_pages,
+            },
+        )
+        documents.append(doc_obj)
+
+    print(f"✅ Extracted text from {len(documents)} pages.")
+    return documents
 
 
-def make_id(chunk, index: int) -> str:
-    """Deterministic ID so re-running ingestion overwrites instead of duplicating."""
-    source = str(chunk.metadata.get("source", ""))
-    page = str(chunk.metadata.get("page", ""))
-    raw = f"{source}|{page}|{index}|{chunk.page_content}"
-    return hashlib.md5(raw.encode("utf-8")).hexdigest()
-
-
-def main():
-    # 1. Determine the PDF file to load
-    if len(sys.argv) > 1:
-        pdf_path = sys.argv[1]
-    else:
-        pdf_files = glob.glob("*.pdf")
-        if pdf_files:
-            pdf_path = pdf_files[0]
-            print(f"No file specified. Using found PDF: {pdf_path}")
-        else:
-            pdf_path = "document.pdf"
-
-    if not os.path.exists(pdf_path):
-        print(f"Error: PDF file '{pdf_path}' not found.")
-        print("Please place a PDF in this folder or run: python3 ingest.py <path_to_pdf>")
-        sys.exit(1)
-
-    # 2. Check for Google API Key (stop early if missing)
-    api_key = os.environ.get("GOOGLE_API_KEY") or os.environ.get("GEMINI_API_KEY")
-    if not api_key:
-        print("Error: GOOGLE_API_KEY environment variable not found.")
-        print("Please set your API key in a .env file or run:")
-        print("  export GOOGLE_API_KEY='your-gemini-api-key'")
-        sys.exit(1)
-
-    # 3. Load PDF
-    print(f"Loading PDF from: {pdf_path} ...")
-    loader = PyPDFLoader(pdf_path)
-    pages = loader.load()
-    print(f"Loaded {len(pages)} page(s).")
-
-    # 4. Split document into chunks
-    print(f"Splitting document into chunks (chunk_size={CHUNK_SIZE}, chunk_overlap={CHUNK_OVERLAP}) ...")
+def chunk_documents(documents: List[Document]) -> List[Document]:
+    """
+    Splits documents into overlapping chunks using RecursiveCharacterTextSplitter.
+    Preserves page number and section metadata on every resulting chunk.
+    """
+    print(
+        f"✂️  Splitting documents into chunks (size={config.CHUNK_SIZE}, "
+        f"overlap={config.CHUNK_OVERLAP})..."
+    )
     text_splitter = RecursiveCharacterTextSplitter(
-        chunk_size=CHUNK_SIZE,
-        chunk_overlap=CHUNK_OVERLAP,
+        chunk_size=config.CHUNK_SIZE,
+        chunk_overlap=config.CHUNK_OVERLAP,
         length_function=len,
+        separators=["\n\n", "\n", "• ", "-> ", ". ", " ", ""],
     )
-    chunks = text_splitter.split_documents(pages)
-    print(f"Total chunks created: {len(chunks)}")
+    chunks = text_splitter.split_documents(documents)
+    print(f"✅ Created {len(chunks)} document chunks.")
+    return chunks
 
-    if not chunks:
-        print("No text chunks were generated from the PDF.")
-        print("If this is a scanned/image-only PDF, it needs OCR before ingestion.")
-        return
 
-    # 5. Generate embeddings and store in Chroma in batches
-    print("Initializing Google Gemini embeddings ('models/gemini-embedding-001') ...")
+def build_vector_store(chunks: List[Document], rebuild: bool = False) -> Chroma:
+    """
+    Generates embeddings for document chunks using Google Gemini and stores
+    them in persistent ChromaDB with automatic retry and rate-limit pacing.
+    """
+    if not config.validate_api_key():
+        raise ValueError(
+            "Gemini API key is missing or invalid.\n"
+            "Please configure GEMINI_API_KEY in your '.env' file."
+        )
+
+    persist_dir = config.CHROMA_DIR
+
+    if rebuild and persist_dir.exists():
+        print(f"🧹 Rebuild flag set: Resetting ChromaDB directory at '{persist_dir}'...")
+        for item in persist_dir.iterdir():
+            if item.name != ".gitkeep":
+                if item.is_dir():
+                    shutil.rmtree(item)
+                else:
+                    item.unlink()
+
+    persist_dir.mkdir(parents=True, exist_ok=True)
+
+    print(f"🧠 Initializing Gemini Embeddings model: {config.EMBEDDING_MODEL}...")
     embeddings = GoogleGenerativeAIEmbeddings(
-        model="models/gemini-embedding-001",
-        google_api_key=api_key,
+        model=config.EMBEDDING_MODEL,
+        google_api_key=config.GEMINI_API_KEY,
     )
 
-    vector_store = Chroma(
+    print(f"💾 Ingesting {len(chunks)} chunks into ChromaDB at '{persist_dir}'...")
+    
+    # Batch ingestion with pacing and retries to gracefully handle Gemini free tier limits
+    batch_size = 25
+    vectorstore = Chroma(
+        collection_name=config.COLLECTION_NAME,
         embedding_function=embeddings,
-        persist_directory=PERSIST_DIR,
+        persist_directory=str(persist_dir),
     )
 
-    print(f"Storing chunks in batches of {BATCH_SIZE} into local Chroma database ('{PERSIST_DIR}') ...")
+    total_batches = (len(chunks) + batch_size - 1) // batch_size
+    for b_idx in range(total_batches):
+        start = b_idx * batch_size
+        batch = chunks[start : start + batch_size]
+        print(f"   Processing batch {b_idx + 1}/{total_batches} ({len(batch)} chunks)...")
 
-    for i in range(0, len(chunks), BATCH_SIZE):
-        batch = chunks[i : i + BATCH_SIZE]
-        ids = [make_id(chunk, i + j) for j, chunk in enumerate(batch)]
-        start_idx = i + 1
-        end_idx = min(i + BATCH_SIZE, len(chunks))
-        print(f"  Embedding & saving chunks {start_idx} to {end_idx} of {len(chunks)} ...")
-
-        for attempt in range(1, MAX_ATTEMPTS + 1):
+        max_retries = 5
+        for attempt in range(1, max_retries + 1):
             try:
-                vector_store.add_documents(batch, ids=ids)
+                vectorstore.add_documents(documents=batch)
                 break
             except Exception as e:
                 err_str = str(e)
+                if "RESOURCE_EXHAUSTED" in err_str or "429" in err_str:
+                    wait_time = 45 + (attempt * 10)
+                    print(f"   ⏳ Rate limit reached (free tier quota). Waiting {wait_time}s before retry (attempt {attempt}/{max_retries})...")
+                    time.sleep(wait_time)
+                else:
+                    print(f"   ❌ Unexpected error in batch {b_idx + 1}: {e}")
+                    raise e
+        else:
+            raise RuntimeError(f"Failed to ingest batch {b_idx + 1} after {max_retries} retries.")
 
-                # Non-retryable errors (bad API key, invalid model, etc.) fail immediately
-                if not is_retryable(err_str):
-                    print(f"    Non-retryable error: {e}")
-                    raise
+        # Gentle pacing between batches
+        time.sleep(2)
 
-                if attempt == MAX_ATTEMPTS:
-                    print(f"    Giving up after {MAX_ATTEMPTS} attempts.")
-                    raise
+    print(f"🎉 ChromaDB ingestion complete and persisted to '{persist_dir}'!")
+    return vectorstore
 
-                wait_time = 15 if is_rate_limit(err_str) else 3
-                reason = "Rate limit reached" if is_rate_limit(err_str) else f"Temporary issue ({e})"
-                print(f"    {reason}. Retrying in {wait_time}s (attempt {attempt}/{MAX_ATTEMPTS}) ...")
-                time.sleep(wait_time)
 
-        time.sleep(1.5)
+def run_ingestion(rebuild: bool = False):
+    """Full ingestion workflow."""
+    print("=" * 60)
+    print("🚀 Starting HR Policy Manual Ingestion Pipeline")
+    print("=" * 60)
 
-    print(f"\nIngestion complete! All {len(chunks)} chunks have been stored in the './{PERSIST_DIR}' directory.")
+    try:
+        documents = load_pdf_documents(config.PDF_PATH)
+        chunks = chunk_documents(documents)
+        build_vector_store(chunks, rebuild=rebuild)
+        print("=" * 60)
+        print("✨ Document Ingestion Pipeline Finished Successfully!")
+        print("=" * 60)
+    except Exception as e:
+        print(f"\n❌ Error during ingestion: {e}", file=sys.stderr)
+        sys.exit(1)
 
 
 if __name__ == "__main__":
-    main()
+    rebuild_flag = "--rebuild" in sys.argv
+    run_ingestion(rebuild=rebuild_flag)
