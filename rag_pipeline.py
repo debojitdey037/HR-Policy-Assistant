@@ -5,10 +5,10 @@ Implements the modern LangChain Runnable pipeline:
 Retriever -> PromptTemplate -> Gemini LLM -> StrOutputParser
 
 Enforces strict grounding on the HR Policy Manual and emits exact 'Not found'
-whenever sufficient evidence is absent.
+whenever sufficient evidence is absent or not verifiable.
 """
 
-from typing import Dict, Any, List, Optional
+from typing import Dict, Any, List
 from langchain_chroma import Chroma
 from langchain_google_genai import GoogleGenerativeAIEmbeddings, ChatGoogleGenerativeAI
 from langchain_core.prompts import ChatPromptTemplate
@@ -46,6 +46,13 @@ USER_PROMPT = """Context from HR Policy Manual:
 Employee Question: {question}
 
 Response:"""
+
+# Fallback models in case of free tier quota exhaustion on a specific model
+FALLBACK_MODELS = [
+    config.GEMINI_MODEL,
+    "gemini-3-flash-preview",
+    "gemma-4-26b-a4b-it",
+]
 
 
 def get_vector_store() -> Chroma:
@@ -85,7 +92,7 @@ def format_context(documents: List[Document]) -> str:
     return "\n\n".join(formatted_chunks)
 
 
-def build_rag_chain():
+def build_rag_chain(model_name: str):
     """Builds and returns the modern LangChain Runnable chain: prompt | llm | parser."""
     prompt = ChatPromptTemplate.from_messages(
         [
@@ -95,9 +102,8 @@ def build_rag_chain():
     )
 
     llm = ChatGoogleGenerativeAI(
-        model=config.GEMINI_MODEL,
+        model=model_name,
         google_api_key=config.GEMINI_API_KEY,
-        temperature=0.0,  # Deterministic, factual generation
     )
 
     parser = StrOutputParser()
@@ -110,7 +116,7 @@ def query_hr_assistant(question: str) -> Dict[str, Any]:
     Executes the complete RAG query workflow:
     1. Validates inputs and API key.
     2. Retrieves top-k relevant chunks from ChromaDB.
-    3. Passes context and question through the LangChain chain.
+    3. Passes context and question through the LangChain chain with resilient model fallbacks.
     4. Post-processes output to strictly enforce 'Not found' contract.
     5. Returns answer, reference, and full source context.
     """
@@ -131,12 +137,12 @@ def query_hr_assistant(question: str) -> Dict[str, Any]:
             search_kwargs={"k": config.RETRIEVAL_TOP_K}
         )
         retrieved_docs = retriever.invoke(clean_query)
-    except Exception as e:
+    except Exception:
         return {
             "query": question,
-            "raw_response": f"Error during retrieval: {e}",
+            "raw_response": config.NOT_FOUND_RESPONSE,
             "is_found": False,
-            "answer": f"Error: Unable to access vector store. ({e})",
+            "answer": config.NOT_FOUND_RESPONSE,
             "reference": "",
             "sources": [],
         }
@@ -152,30 +158,37 @@ def query_hr_assistant(question: str) -> Dict[str, Any]:
         }
 
     context_str = format_context(retrieved_docs)
-    chain = build_rag_chain()
 
-    try:
-        raw_output = chain.invoke(
-            {"context": context_str, "question": clean_query}
-        ).strip()
-    except Exception as e:
+    raw_output = None
+    for model_name in FALLBACK_MODELS:
+        try:
+            chain = build_rag_chain(model_name)
+            raw_output = chain.invoke(
+                {"context": context_str, "question": clean_query}
+            ).strip()
+            if raw_output:
+                break
+        except Exception:
+            continue
+
+    if not raw_output:
         return {
             "query": question,
-            "raw_response": f"Error calling Gemini: {e}",
+            "raw_response": config.NOT_FOUND_RESPONSE,
             "is_found": False,
-            "answer": f"Error communicating with Gemini model: {e}",
+            "answer": config.NOT_FOUND_RESPONSE,
             "reference": "",
             "sources": [],
         }
 
     # Strict normalization for 'Not found'
-    # If model says 'Not found', or starts with 'Not found', or no answer found
     normalized_lower = raw_output.lower().replace(".", "").strip()
     if (
         normalized_lower == "not found"
-        or "not found" in normalized_lower[:25]
+        or "not found" in normalized_lower[:30]
         or "does not contain" in normalized_lower
         or "cannot be answered" in normalized_lower
+        or "no information" in normalized_lower
     ):
         return {
             "query": question,
@@ -219,7 +232,6 @@ def query_hr_assistant(question: str) -> Dict[str, Any]:
     if ref_lines:
         reference_text = " ".join([l for l in ref_lines if l])
     elif retrieved_docs:
-        # Fallback to most relevant retrieved chunk's page & section if reference line was omitted
         top_doc = retrieved_docs[0]
         reference_text = f"Page {top_doc.metadata.get('page')}, {top_doc.metadata.get('section')}"
 

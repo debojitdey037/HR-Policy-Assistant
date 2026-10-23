@@ -1,6 +1,6 @@
 # HR Policy Assistant — LMS Evaluation Report
 
-**Execution Date:** 2026-10-23 15:30:22
+**Execution Date:** 2026-10-23 15:44:09
 **Gemini Model:** `gemini-3.5-flash`
 **Embedding Model:** `models/gemini-embedding-001`
 **Vector Database:** ChromaDB (`chroma_db`)
@@ -9,11 +9,11 @@
 
 | Q# | Question | Expected | Chatbot Answer | Reference | Status |
 |---|---|---|---|---|---|
-| 1 | How many days of Privilege Leave (PL) does a permanent employee get per year? | FOUND | A permanent employee is allowed 12 days of Privilege Leave (PL) per calendar year (1st Jan–31st Dec). | Page 60, [G] Leave Policy | ✅ PASSED (Verified Page 60) |
-| 2 | What is the probation period for employees up to Senior Manager? | FOUND | Employees up to Senior Manager are placed on probation for a period of 3 months from the date of their joining. | Page 42, [B] Probation Policy | ✅ PASSED (Verified Page 42) |
+| 1 | How many days of Privilege Leave (PL) does a permanent employee get per year? | FOUND | Permanent employees are allowed 12 days of Privilege Leave (PL) per calendar year. | Page 60, [G] Leave Policy | ✅ PASSED (Verified Page 60) |
+| 2 | What is the probation period for employees up to Senior Manager? | FOUND | All employees up to Sr. Manager are placed in probation for a period of 3 months from the date of their joining. | Page 42, [B] Probation Policy | ✅ PASSED (Verified Page 42) |
 | 3 | What is the company's health-insurance premium amount? | NOT_FOUND | Not found | N/A | ✅ PASSED (Strict Not found) |
 | 4 | What is the current GST rate in India? | NOT_FOUND | Not found | N/A | ✅ PASSED (Strict Not found) |
-| 5 | How many days of maternity leave are given? | FOUND | The company provides a total of 12 weeks (90 days) of Maternity Leave with pay, of which not more than 6 weeks (45 days) should precede the expected date of delivery. In case of miscarriage or medical termination of pregnancy, 4 weeks of leave with pay is permitted. | Page 62, [G] Leave Policy | ✅ PASSED (Verified Page 62) |
+| 5 | How many days of maternity leave are given? | FOUND | A total of 12 weeks (90 days) of Maternity Leave with pay is provided, of which not more than 6 weeks (45 days) should precede the expected date of delivery. | Page 62, [G] Leave Policy | ✅ PASSED (Verified Page 62) |
 
 ---
 
@@ -24,7 +24,7 @@
 - **Expected Behavior:** `FOUND`
 - **Model Output:**
   ```
-  Answer: A permanent employee is allowed 12 days of Privilege Leave (PL) per calendar year (1st Jan–31st Dec).
+  Answer: Permanent employees are allowed 12 days of Privilege Leave (PL) per calendar year.
   Reference: Page 60, [G] Leave Policy
   ```
 - **Validation Status:** ✅ PASSED (Verified Page 60)
@@ -38,7 +38,7 @@
 - **Expected Behavior:** `FOUND`
 - **Model Output:**
   ```
-  Answer: Employees up to Senior Manager are placed on probation for a period of 3 months from the date of their joining.
+  Answer: All employees up to Sr. Manager are placed in probation for a period of 3 months from the date of their joining.
   Reference: Page 42, [B] Probation Policy
   ```
 - **Validation Status:** ✅ PASSED (Verified Page 42)
@@ -80,7 +80,7 @@
 - **Expected Behavior:** `FOUND`
 - **Model Output:**
   ```
-  Answer: The company provides a total of 12 weeks (90 days) of Maternity Leave with pay, of which not more than 6 weeks (45 days) should precede the expected date of delivery. In case of miscarriage or medical termination of pregnancy, 4 weeks of leave with pay is permitted.
+  Answer: A total of 12 weeks (90 days) of Maternity Leave with pay is provided, of which not more than 6 weeks (45 days) should precede the expected date of delivery.
   Reference: Page 62, [G] Leave Policy
   ```
 - **Validation Status:** ✅ PASSED (Verified Page 62)

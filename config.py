@@ -18,9 +18,9 @@ load_dotenv(dotenv_path=ENV_PATH)
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "").strip()
 
 # Model Configurations
-# gemini-3.5-flash offers optimal reasoning and speed for retrieval synthesis
+# gemini-3.5-flash-lite offers high accuracy, fast generation, and independent daily quota
 # models/gemini-embedding-001 generates 3072-dimensional semantic embeddings
-GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-3.5-flash")
+GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-3.5-flash-lite")
 EMBEDDING_MODEL = os.getenv("EMBEDDING_MODEL", "models/gemini-embedding-001")
 
 # File and Directory Paths
