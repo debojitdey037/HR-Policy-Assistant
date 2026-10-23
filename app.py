@@ -1,11 +1,10 @@
 """
 HR Policy Assistant — Enso Group RAG Chatbot
 Web Application built with Streamlit, LangChain, ChromaDB & Google Gemini.
-Exact replica of the high-fidelity UI mockup.
+Supports both Light Mode (exact replica of high-fidelity mockup) and Dark Mode.
 """
 
 import sys
-import textwrap
 from pathlib import Path
 import streamlit as st
 
@@ -25,6 +24,21 @@ st.set_page_config(
     initial_sidebar_state="collapsed",
 )
 
+# Initialize Session State
+if "dark_mode" not in st.session_state:
+    st.session_state.dark_mode = False
+
+if "chat_history" not in st.session_state:
+    st.session_state.chat_history = [
+        {
+            "query": "How many days of Privilege Leave (PL) does a permanent employee get per year?",
+            "answer": "Permanent employees are entitled to 12 days of Privilege Leave (PL) per year.",
+            "reference": "Page 60 – Leave Policy (Section: Privilege Leave)",
+            "excerpt": "Permanent employees are eligible for 12 days of Privilege Leave (PL) per year.",
+            "is_found": True,
+        }
+    ]
+
 
 def render_html(html_str: str):
     """Render HTML safely without markdown code-block triggers."""
@@ -32,317 +46,426 @@ def render_html(html_str: str):
     st.markdown(clean_html, unsafe_allow_html=True)
 
 
-# Custom High-Fidelity CSS matching user's exact mockup
+is_dark = st.session_state.dark_mode
+
+# Theme variables
+if is_dark:
+    app_bg = "radial-gradient(circle at 10% 12%, #0F172A 0%, #070B14 45%, #0B1120 100%)"
+    text_main = "#F8FAFC"
+    card_bg = "#111A2E"
+    card_border = "#1E293B"
+    card_shadow = "0 15px 35px rgba(0, 0, 0, 0.5), 0 0 25px rgba(59, 130, 246, 0.08)"
+    header_border = "#1E293B"
+    title_color = "#F8FAFC"
+    subtitle_color = "#94A3B8"
+    enso_title = "#F8FAFC"
+    enso_sub = "#64748B"
+    enso_stroke = "#F8FAFC"
+    enso_dot = "#38BDF8"
+    feature_icon = "#38BDF8"
+    feature_text = "#E2E8F0"
+    user_bubble_bg = "#1E3A8A"
+    user_bubble_text = "#DBEAFE"
+    user_avatar_bg = "#1E293B"
+    user_avatar_icon = "#60A5FA"
+    bot_avatar_bg = "#1E293B"
+    bot_avatar_border = "#334155"
+    bot_avatar_icon = "#60A5FA"
+    bot_text = "#F1F5F9"
+    ref_subcard_bg = "#0B132B"
+    ref_subcard_border = "#1E2D4A"
+    ref_title = "#60A5FA"
+    ref_page = "#93C5FD"
+    ref_divider = "#1E293B"
+    excerpt_heading = "#60A5FA"
+    excerpt_text = "#CBD5E1"
+    not_found_bg = "#450A0A"
+    not_found_border = "#7F1D1D"
+    not_found_text = "#FCA5A5"
+    input_bg = "#0F172A"
+    input_border = "#334155"
+    input_text = "#F8FAFC"
+    disclaimer_color = "#64748B"
+    footer_color = "#94A3B8"
+    toggle_bg = "#1E293B"
+    toggle_border = "#334155"
+    toggle_color = "#F8FAFC"
+else:
+    app_bg = "radial-gradient(circle at 10% 12%, #E4EFF9 0%, #F5F8FC 45%, #EBF1F9 100%)"
+    text_main = "#1E293B"
+    card_bg = "#FFFFFF"
+    card_border = "#E2E8F0"
+    card_shadow = "0 10px 30px rgba(15, 43, 72, 0.05), 0 2px 6px rgba(0, 0, 0, 0.02)"
+    header_border = "#F1F5F9"
+    title_color = "#0F2B48"
+    subtitle_color = "#475569"
+    enso_title = "#0B2545"
+    enso_sub = "#475569"
+    enso_stroke = "#0F2B48"
+    enso_dot = "#3B82F6"
+    feature_icon = "#2563EB"
+    feature_text = "#1E293B"
+    user_bubble_bg = "#E0ECFF"
+    user_bubble_text = "#1E3A8A"
+    user_avatar_bg = "#DBEAFE"
+    user_avatar_icon = "#2563EB"
+    bot_avatar_bg = "#EFF6FF"
+    bot_avatar_border = "#DBEAFE"
+    bot_avatar_icon = "#2563EB"
+    bot_text = "#1E293B"
+    ref_subcard_bg = "#F1F6FC"
+    ref_subcard_border = "#E2EBF6"
+    ref_title = "#1E40AF"
+    ref_page = "#1E3A8A"
+    ref_divider = "#E2E8F0"
+    excerpt_heading = "#1E40AF"
+    excerpt_text = "#334155"
+    not_found_bg = "#FEF2F2"
+    not_found_border = "#FEE2E2"
+    not_found_text = "#991B1B"
+    input_bg = "#FFFFFF"
+    input_border = "#E2E8F0"
+    input_text = "#1E293B"
+    disclaimer_color = "#94A3B8"
+    footer_color = "#475569"
+    toggle_bg = "#FFFFFF"
+    toggle_border = "#CBD5E1"
+    toggle_color = "#0F2B48"
+
+# Dynamic Styling
 render_html(
-    """
+    f"""
     <style>
     @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
 
-    html, body, [class*="css"] {
+    html, body, [class*="css"] {{
         font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif !important;
-    }
+    }}
 
-    /* Soft Pastel Blue Gradient Background */
-    .stApp {
-        background: radial-gradient(circle at 10% 12%, #E4EFF9 0%, #F5F8FC 45%, #EBF1F9 100%) !important;
-        color: #1E293B !important;
-    }
+    .stApp {{
+        background: {app_bg} !important;
+        color: {text_main} !important;
+    }}
 
-    /* Container constraints */
-    .block-container {
-        padding-top: 3.2rem !important;
+    .block-container {{
+        padding-top: 1.5rem !important;
         padding-bottom: 2rem !important;
         max-width: 1220px !important;
-    }
+    }}
 
-    /* Hide default Streamlit headers, menus, deploy button and footers */
     header[data-testid="stHeader"], 
     [data-testid="stToolbar"], 
     [data-testid="stAppDeployButton"], 
     #MainMenu, 
-    footer {
+    footer {{
         display: none !important;
         visibility: hidden !important;
-    }
+    }}
 
-    /* LEFT COLUMN STYLING */
-    .brand-wrap {
+    /* Floating Theme Switch in Top-Right Corner */
+    div[data-testid="stElementContainer"]:has(button[data-testid="stBaseButton-secondary"]) {{
+        position: fixed !important;
+        top: 24px !important;
+        right: 32px !important;
+        z-index: 999999 !important;
+        width: auto !important;
+    }}
+
+    button[data-testid="stBaseButton-secondary"] {{
+        background: {toggle_bg} !important;
+        border: 1px solid {toggle_border} !important;
+        color: {toggle_color} !important;
+        border-radius: 20px !important;
+        padding: 8px 18px !important;
+        font-weight: 600 !important;
+        font-size: 0.85rem !important;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12) !important;
+        cursor: pointer !important;
+        transition: all 0.2s ease !important;
+    }}
+
+    button[data-testid="stBaseButton-secondary"] p {{
+        color: {toggle_color} !important;
+        font-size: 0.85rem !important;
+        font-weight: 600 !important;
+        margin: 0 !important;
+    }}
+
+    button[data-testid="stBaseButton-secondary"]:hover {{
+        transform: translateY(-1px);
+        box-shadow: 0 6px 16px rgba(0, 0, 0, 0.18) !important;
+    }}
+
+    /* LEFT COLUMN */
+    .brand-wrap {{
         display: flex;
         align-items: center;
         gap: 14px;
         margin-bottom: 2.5rem;
-    }
+    }}
 
-    .enso-logo-title {
+    .enso-logo-title {{
         font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-        color: #0B2545;
+        color: {enso_title};
         font-size: 1.85rem;
         font-weight: 700;
         line-height: 1;
         letter-spacing: -0.02em;
-    }
+    }}
 
-    .enso-logo-subtitle {
+    .enso-logo-subtitle {{
         font-size: 0.68rem;
         font-weight: 700;
         letter-spacing: 0.22em;
-        color: #475569;
+        color: {enso_sub};
         margin-top: 3px;
-    }
+    }}
 
-    .main-title {
+    .main-title {{
         font-size: 3.1rem;
         font-weight: 800;
         line-height: 1.12;
-        color: #0F2B48;
+        color: {title_color};
         letter-spacing: -0.035em;
         margin-bottom: 1.35rem;
-    }
+    }}
 
-    .subtitle-desc {
+    .subtitle-desc {{
         font-size: 1.05rem;
         line-height: 1.55;
-        color: #475569;
+        color: {subtitle_color};
         font-weight: 400;
         margin-bottom: 2.5rem;
         max-width: 360px;
-    }
+    }}
 
-    .feature-item {
+    .feature-item {{
         display: flex;
         align-items: center;
         gap: 18px;
         margin-bottom: 1.6rem;
-    }
+    }}
 
-    .feature-icon-box {
+    .feature-icon-box {{
         width: 36px;
         height: 36px;
         display: flex;
         align-items: center;
         justify-content: center;
         flex-shrink: 0;
-    }
+    }}
 
-    .feature-text {
+    .feature-text {{
         font-size: 0.96rem;
         font-weight: 600;
-        color: #1E293B;
+        color: {feature_text};
         line-height: 1.25;
-    }
+    }}
 
-    /* RIGHT COLUMN STYLING (TARGET TOP-LEVEL COLUMN ONLY) */
-    [data-testid="stHorizontalBlock"]:not([data-testid="stForm"] *) > [data-testid="stColumn"]:nth-of-type(2) {
-        background: #FFFFFF !important;
-        border: 1px solid #E2E8F0 !important;
+    /* RIGHT COLUMN CHAT CARD */
+    [data-testid="stHorizontalBlock"]:not([data-testid="stForm"] *) > [data-testid="stColumn"]:nth-of-type(2) {{
+        background: {card_bg} !important;
+        border: 1px solid {card_border} !important;
         border-radius: 24px !important;
-        box-shadow: 0 10px 30px rgba(15, 43, 72, 0.05), 0 2px 6px rgba(0, 0, 0, 0.02) !important;
+        box-shadow: {card_shadow} !important;
         padding: 26px 32px 24px 32px !important;
         min-height: 560px !important;
-    }
+    }}
 
-    /* RESET NESTED FORM COLUMNS */
-    [data-testid="stForm"] [data-testid="stColumn"] {
+    [data-testid="stForm"] [data-testid="stColumn"] {{
         background: transparent !important;
         border: none !important;
         border-radius: 0 !important;
         box-shadow: none !important;
         min-height: unset !important;
         padding: 0 !important;
-    }
+    }}
 
-    .chat-header {
+    .chat-header {{
         display: flex;
         justify-content: space-between;
         align-items: center;
         padding-bottom: 18px;
-        border-bottom: 1px solid #F1F5F9;
+        border-bottom: 1px solid {header_border};
         margin-bottom: 22px;
         width: 100%;
-    }
+    }}
 
-    .chat-header-title {
+    .chat-header-title {{
         display: flex;
         align-items: center;
         gap: 12px;
         font-size: 1.18rem;
         font-weight: 700;
-        color: #0F2B48;
-    }
+        color: {title_color};
+    }}
 
-    .chat-header-status {
+    .chat-header-status {{
         display: flex;
         align-items: center;
         gap: 8px;
         font-size: 0.85rem;
         font-weight: 500;
-        color: #475569;
-    }
+        color: {subtitle_color};
+    }}
 
-    .status-dot-green {
+    .status-dot-green {{
         width: 8px;
         height: 8px;
         border-radius: 50%;
         background-color: #10B981;
         display: inline-block;
-    }
+    }}
 
-    /* CHAT MESSAGES CONTAINER */
-    .chat-messages-container {
+    .chat-messages-container {{
         display: flex;
         flex-direction: column;
         gap: 20px;
         margin-bottom: 22px;
         width: 100%;
-    }
+    }}
 
-    /* User Message Bubble */
-    .user-msg-row {
+    .user-msg-row {{
         display: flex;
         justify-content: flex-end;
         align-items: flex-start;
         gap: 12px;
         width: 100%;
-    }
+    }}
 
-    .user-bubble {
-        background: #E0ECFF;
-        color: #1E3A8A;
+    .user-bubble {{
+        background: {user_bubble_bg};
+        color: {user_bubble_text};
         border-radius: 16px 16px 4px 16px;
         padding: 13px 18px;
         font-size: 0.94rem;
         line-height: 1.48;
         font-weight: 500;
         max-width: 82%;
-    }
+    }}
 
-    .avatar-user {
+    .avatar-user {{
         width: 36px;
         height: 36px;
         border-radius: 50%;
-        background: #DBEAFE;
+        background: {user_avatar_bg};
         display: flex;
         align-items: center;
         justify-content: center;
         flex-shrink: 0;
-    }
+    }}
 
-    /* Bot Message Bubble */
-    .bot-msg-row {
+    .bot-msg-row {{
         display: flex;
         justify-content: flex-start;
         align-items: flex-start;
         gap: 12px;
         width: 100%;
-    }
+    }}
 
-    .avatar-bot {
+    .avatar-bot {{
         width: 36px;
         height: 36px;
         border-radius: 50%;
-        background: #EFF6FF;
-        border: 1px solid #DBEAFE;
+        background: {bot_avatar_bg};
+        border: 1px solid {bot_avatar_border};
         display: flex;
         align-items: center;
         justify-content: center;
         flex-shrink: 0;
-    }
+    }}
 
-    .bot-content-wrap {
+    .bot-content-wrap {{
         display: flex;
         flex-direction: column;
         gap: 10px;
         max-width: 88%;
-    }
+    }}
 
-    .bot-answer-text {
+    .bot-answer-text {{
         font-size: 0.96rem;
         line-height: 1.55;
-        color: #1E293B;
+        color: {bot_text};
         font-weight: 400;
-    }
+    }}
 
-    /* Nested Reference Card */
-    .reference-subcard {
-        background: #F1F6FC;
-        border: 1px solid #E2EBF6;
+    .reference-subcard {{
+        background: {ref_subcard_bg};
+        border: 1px solid {ref_subcard_border};
         border-radius: 14px;
         padding: 13px 16px;
-    }
+    }}
 
-    .reference-title-line {
+    .reference-title-line {{
         display: flex;
         align-items: center;
         gap: 6px;
         font-size: 0.84rem;
         font-weight: 700;
-        color: #1E40AF;
+        color: {ref_title};
         margin-bottom: 2px;
-    }
+    }}
 
-    .reference-page-text {
+    .reference-page-text {{
         font-size: 0.86rem;
-        color: #1E3A8A;
+        color: {ref_page};
         font-weight: 500;
         margin-bottom: 8px;
-    }
+    }}
 
-    .reference-divider {
+    .reference-divider {{
         height: 1px;
-        background-color: #E2E8F0;
+        background-color: {ref_divider};
         margin: 6px 0 8px 0;
-    }
+    }}
 
-    .source-excerpt-heading {
+    .source-excerpt-heading {{
         font-size: 0.82rem;
         font-weight: 700;
-        color: #1E40AF;
+        color: {excerpt_heading};
         margin-bottom: 2px;
-    }
+    }}
 
-    .source-excerpt-text {
+    .source-excerpt-text {{
         font-size: 0.85rem;
         font-style: italic;
-        color: #334155;
+        color: {excerpt_text};
         line-height: 1.45;
-    }
+    }}
 
-    /* Strict Not Found Bubble */
-    .not-found-bubble {
-        background: #FEF2F2;
-        border: 1px solid #FEE2E2;
+    .not-found-bubble {{
+        background: {not_found_bg};
+        border: 1px solid {not_found_border};
         border-radius: 12px;
         padding: 12px 18px;
         font-size: 1.02rem;
         font-weight: 700;
-        color: #991B1B;
-    }
+        color: {not_found_text};
+    }}
 
-    /* Form and Inputs */
-    div[data-testid="stForm"] {
+    div[data-testid="stForm"] {{
         border: none !important;
         background: transparent !important;
         padding: 0 !important;
         margin-top: 10px !important;
-    }
+    }}
 
-    div[data-testid="stTextInput"] input {
-        background: #FFFFFF !important;
-        color: #1E293B !important;
-        border: 1.5px solid #E2E8F0 !important;
+    div[data-testid="stTextInput"] input {{
+        background: {input_bg} !important;
+        color: {input_text} !important;
+        border: 1.5px solid {input_border} !important;
         border-radius: 12px !important;
         padding: 12px 16px !important;
         font-size: 0.95rem !important;
         height: 48px !important;
-    }
+    }}
 
-    div[data-testid="stTextInput"] input:focus {
+    div[data-testid="stTextInput"] input:focus {{
         border-color: #2563EB !important;
         box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.2) !important;
-    }
+    }}
 
-    /* Send Button */
-    div[data-testid="stFormSubmitButton"] > button {
+    div[data-testid="stFormSubmitButton"] > button {{
         background: #2563EB !important;
         color: #FFFFFF !important;
         border: none !important;
@@ -356,62 +479,55 @@ render_html(
         justify-content: center !important;
         transition: all 0.2s ease !important;
         box-shadow: 0 4px 12px rgba(37, 99, 235, 0.25) !important;
-    }
+    }}
 
-    div[data-testid="stFormSubmitButton"] > button p {
+    div[data-testid="stFormSubmitButton"] > button p {{
         color: #FFFFFF !important;
         font-size: 0.95rem !important;
         font-weight: 600 !important;
         margin: 0 !important;
-    }
+    }}
 
-    div[data-testid="stFormSubmitButton"] > button:hover {
+    div[data-testid="stFormSubmitButton"] > button:hover {{
         background: #1D4ED8 !important;
         transform: translateY(-1px);
         box-shadow: 0 6px 16px rgba(37, 99, 235, 0.35) !important;
-    }
+    }}
 
-    .disclaimer-caption {
+    .disclaimer-caption {{
         font-size: 0.78rem;
-        color: #94A3B8;
+        color: {disclaimer_color};
         display: flex;
         align-items: center;
         gap: 5px;
         margin-top: 8px;
-    }
+    }}
 
-    /* SITE FOOTER */
-    .site-footer {
+    .site-footer {{
         text-align: center;
         margin-top: 3.5rem;
         padding-top: 1.5rem;
         font-size: 0.95rem;
         font-weight: 500;
-        color: #475569;
+        color: {footer_color};
         letter-spacing: 0.01em;
-    }
+    }}
 
-    .site-footer span.heart {
+    .site-footer span.heart {{
         color: #EF4444;
         display: inline-block;
         margin: 0 4px;
         font-size: 1.1rem;
-    }
+    }}
     </style>
-    """,
+    """
 )
 
-# Initialize Session State
-if "chat_history" not in st.session_state:
-    st.session_state.chat_history = [
-        {
-            "query": "How many days of Privilege Leave (PL) does a permanent employee get per year?",
-            "answer": "Permanent employees are entitled to 12 days of Privilege Leave (PL) per year.",
-            "reference": "Page 60 – Leave Policy (Section: Privilege Leave)",
-            "excerpt": "Permanent employees are eligible for 12 days of Privilege Leave (PL) per year.",
-            "is_found": True,
-        }
-    ]
+# Floating Theme Switch
+btn_label = "☀️ Light Mode" if is_dark else "🌙 Dark Mode"
+if st.button(btn_label, key="theme_toggle_btn"):
+    st.session_state.dark_mode = not st.session_state.dark_mode
+    st.rerun()
 
 # Layout Columns
 left_col, right_col = st.columns([0.38, 0.62], gap="large")
@@ -419,11 +535,11 @@ left_col, right_col = st.columns([0.38, 0.62], gap="large")
 # LEFT COLUMN: Branding & Features
 with left_col:
     render_html(
-        """
+        f"""
         <div class="brand-wrap">
             <svg width="48" height="48" viewBox="0 0 48 48" fill="none">
-                <circle cx="24" cy="24" r="17" stroke="#0F2B48" stroke-width="7" stroke-dasharray="84 25" stroke-linecap="round"/>
-                <circle cx="35" cy="13" r="3.5" fill="#3B82F6"/>
+                <circle cx="24" cy="24" r="17" stroke="{enso_stroke}" stroke-width="7" stroke-dasharray="84 25" stroke-linecap="round"/>
+                <circle cx="35" cy="13" r="3.5" fill="{enso_dot}"/>
             </svg>
             <div>
                 <div class="enso-logo-title">Enso</div>
@@ -441,7 +557,7 @@ with left_col:
 
         <div class="feature-item">
             <div class="feature-icon-box">
-                <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#2563EB" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="{feature_icon}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                     <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
                     <path d="m9 12 2 2 4-4"/>
                 </svg>
@@ -451,7 +567,7 @@ with left_col:
 
         <div class="feature-item">
             <div class="feature-icon-box">
-                <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#2563EB" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="{feature_icon}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                     <path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H20v20H6.5a2.5 2.5 0 0 1-2.5-2.5Z"/>
                     <path d="M6 2v20"/>
                 </svg>
@@ -461,7 +577,7 @@ with left_col:
 
         <div class="feature-item">
             <div class="feature-icon-box">
-                <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#2563EB" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="{feature_icon}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                     <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/>
                 </svg>
             </div>
@@ -474,13 +590,13 @@ with left_col:
 with right_col:
     # 1. Header
     render_html(
-        """
+        f"""
         <div class="chat-header">
             <div class="chat-header-title">
-                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#0F2B48" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="{title_color}" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
                     <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
-                    <circle cx="9" cy="10" r="1" fill="#0F2B48"/>
-                    <circle cx="15" cy="10" r="1" fill="#0F2B48"/>
+                    <circle cx="9" cy="10" r="1" fill="{title_color}"/>
+                    <circle cx="15" cy="10" r="1" fill="{title_color}"/>
                 </svg>
                 <span>HR Policy Assistant</span>
             </div>
@@ -507,7 +623,7 @@ with right_col:
                 <div class="user-msg-row">
                     <div class="user-bubble">{q}</div>
                     <div class="avatar-user">
-                        <svg width="18" height="18" viewBox="0 0 24 24" fill="#2563EB">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="{user_avatar_icon}">
                             <path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/>
                         </svg>
                     </div>
@@ -518,10 +634,10 @@ with right_col:
         # Bot Message
         if not is_found or ans.strip().lower() == "not found":
             render_html(
-                """
+                f"""
                 <div class="bot-msg-row">
                     <div class="avatar-bot">
-                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#2563EB" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="{bot_avatar_icon}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                             <rect x="3" y="11" width="18" height="10" rx="2"/>
                             <circle cx="12" cy="5" r="2"/>
                             <path d="M12 7v4"/>
@@ -546,7 +662,7 @@ with right_col:
                 f"""
                 <div class="bot-msg-row">
                     <div class="avatar-bot">
-                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#2563EB" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="{bot_avatar_icon}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                             <rect x="3" y="11" width="18" height="10" rx="2"/>
                             <circle cx="12" cy="5" r="2"/>
                             <path d="M12 7v4"/>
@@ -558,7 +674,7 @@ with right_col:
                         <div class="bot-answer-text">{ans}</div>
                         <div class="reference-subcard">
                             <div class="reference-title-line">
-                                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#1E40AF" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="{ref_title}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                                     <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
                                     <polyline points="14 2 14 8 20 8"/>
                                 </svg>

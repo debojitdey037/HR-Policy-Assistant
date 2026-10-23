@@ -57,12 +57,15 @@ Standard Large Language Models (LLMs) suffer from:
 
 - **Strict Source Grounding:** Strict system prompt prevents external assumptions, fabrication, and speculation.
 - **Accurate Page-Level Citations:** Every retrieved chunk retains the 1-indexed PDF page number and section heading.
-- **Binary 'Not found' Fallback:** If information is missing or out-of-scope (e.g. government GST taxes), returns exactly `Not found`.
+- **Binary 'Not found' Fallback:** If information is missing or out-of-scope (e.g. government GST taxes), returns strictly `Not found`.
+- **High-Fidelity Enso Group UI:** Pixel-perfect 2-column interface featuring Enso Group branding, feature highlights, and elevated chat card.
+- **Dynamic Dark Mode & Light Mode:** Seamless toggle between vibrant pastel light theme and sleek midnight dark theme with one click.
+- **Nested Citation Cards:** Direct visual reference subcards showing the exact manual page, policy section, and verbatim source excerpts.
 - **Persistent Vector Store:** ChromaDB stores 3072-dimensional Gemini embeddings locally to eliminate redundant ingestion.
-- **Paced Batch Ingestion with Quota Retries:** Handles Google Gemini Free Tier rate limits (100 req/min) automatically with exponential backoff.
-- **Modern LangChain LCEL Pipeline:** Implements `prompt | llm | parser` runnable pipeline.
-- **Interactive Streamlit Web UI:** Clean, responsive UI with one-click evaluation buttons, clear controls, and source excerpt inspection.
-- **Automated Test Suite:** Evaluates all 5 LMS benchmark questions and outputs markdown reports.
+- **Paced Batch Ingestion with Quota Retries:** Handles Google Gemini Free Tier rate limits automatically with exponential backoff.
+- **Modern LangChain LCEL Pipeline:** Implements deterministic `prompt | llm | parser` runnable pipeline.
+- **Automated Test Suite:** Benchmarks LMS evaluation questions and generates markdown verification reports.
+- **Personalized Attribution:** Elegant *"Made with ❤️ by Debojit"* branding in the footer.
 
 ---
 
@@ -332,28 +335,26 @@ Our system enforces a **Zero-Tolerance Hallucination Architecture**:
 
 ## 18. Application Screenshots and Demonstration
 
-All screenshots below were captured from the live Streamlit application:
+All screenshots below were captured from the live application running in the browser:
 
-### 1. Chatbot Home Screen
-![Home Screen](screenshots/01_home_screen.png)
+### 1. High-Fidelity Light Mode Interface
+*Faithful reproduction of the official corporate UI mockup with ambient pastel gradient, left-hand Enso branding & policy highlights, and elevated white chat card with floating theme toggle.*
 
-### 2. Privilege Leave Question (Q1)
-![Privilege Leave](screenshots/02_privilege_leave_question.png)
+![Light Mode Interface](screenshots/light_mode_ui.png)
 
-### 3. Probation Period Question (Q2)
-![Probation Period](screenshots/03_probation_period_question.png)
+---
 
-### 4. Health-Insurance Question (Q3 — 'Not found')
-![Health Insurance](screenshots/04_health_insurance_question.png)
+### 2. Modern Midnight Dark Mode
+*Sleek, eye-friendly dark mode featuring deep midnight slate tones (`#0F172A`), high-contrast text, electric blue iconography, and glowing bot status indicators.*
 
-### 5. India GST Rate Question (Q4 — 'Not found')
-![GST Rate](screenshots/05_gst_rate_question.png)
+![Dark Mode Interface](screenshots/dark_mode_ui.png)
 
-### 6. Maternity Leave Question (Q5)
-![Maternity Leave](screenshots/06_maternity_leave_question.png)
+---
 
-### 7. Source Citation & Supporting Document Excerpt
-![Source Excerpt](screenshots/07_source_reference_excerpt.png)
+### 3. Strict Grounding Fallback ('Not found')
+*When a question cannot be substantiated by the Enso Group HR Policy Manual (such as external Indian tax rates or unrelated policies), the system strictly outputs a high-visibility red `Not found` badge with zero hallucination.*
+
+![Strict Not Found Grounding](screenshots/not_found_ui.png)
 
 ---
 
@@ -373,21 +374,26 @@ All screenshots below were captured from the live Streamlit application:
 
 ## 20. GitHub Upload Instructions
 
-To publish this project to your GitHub repository:
+The repository is hosted on GitHub at:
+**[https://github.com/debojitdey037/HR-Policy-Assistant.git](https://github.com/debojitdey037/HR-Policy-Assistant.git)**
 
+To clone and run locally:
 ```bash
-# 1. Check Git status (ensure .env is NOT tracked)
-git status
-
-# 2. Stage all project files, tests, reports, and screenshots
-git add app.py ingest.py rag_pipeline.py config.py capture_screenshots.py
-git add requirements.txt .env.example .gitignore README.md
-git add data/.gitkeep data/hr_manual.pdf chroma_db/.gitkeep
-git add tests/ reports/ screenshots/
-
-# 3. Commit changes
-git commit -m "feat: complete HR Policy Assistant RAG Chatbot with ChromaDB, Gemini, and tests"
-
-# 4. Push to origin main
-git push origin main
+git clone https://github.com/debojitdey037/HR-Policy-Assistant.git
+cd HR-Policy-Assistant
+python -m venv venv
+source venv/bin/activate
+pip install -r requirements.txt
+cp .env.example .env  # Add your GEMINI_API_KEY
+python ingest.py      # Build vector database
+streamlit run app.py  # Launch UI
 ```
+
+---
+
+## 21. Author & Attribution
+
+Developed for college midterm submission by **Debojit Dey**.
+
+> **Made with ❤️ by Debojit**
+
