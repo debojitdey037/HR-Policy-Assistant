@@ -175,8 +175,8 @@ Before setting up the project, ensure your machine has:
 
 ### Step 1: Clone the Repository
 ```bash
-git clone https://github.com/debojitdey037/AskMyPDF.git
-cd AskMyPDF
+git clone https://github.com/debojitdey037/HR-Policy-Assistant.git
+cd HR-Policy-Assistant
 ```
 
 ### Step 2: Create and Activate Virtual Environment
