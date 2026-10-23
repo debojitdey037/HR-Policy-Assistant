@@ -1,6 +1,6 @@
 """
 Automated genuine screenshot capture script using installed Google Chrome.
-Generates genuine screenshots of all LMS test cases on the live Streamlit app.
+Generates genuine screenshots of all UI states and LMS questions on the live Streamlit app.
 """
 
 import time
@@ -16,89 +16,116 @@ APP_URL = "http://localhost:8501"
 TEST_CASES = [
     {
         "filename": "02_privilege_leave_question.png",
-        "btn_text": "1. Privilege Leave Days",
         "question": "How many days of Privilege Leave (PL) does a permanent employee get per year?",
     },
     {
         "filename": "03_probation_period_question.png",
-        "btn_text": "2. Probation Period",
         "question": "What is the probation period for employees up to Senior Manager?",
     },
     {
         "filename": "04_health_insurance_question.png",
-        "btn_text": "3. Health-Insurance Premium",
         "question": "What is the company's health-insurance premium amount?",
     },
     {
         "filename": "05_gst_rate_question.png",
-        "btn_text": "4. India GST Rate",
         "question": "What is the current GST rate in India?",
     },
     {
         "filename": "06_maternity_leave_question.png",
-        "btn_text": "5. Maternity Leave Days",
         "question": "How many days of maternity leave are given?",
     },
 ]
 
 
+def ask_question_and_capture(page, question_text, output_filename):
+    print(f"\nSubmitting: '{question_text}' -> {output_filename}...")
+    page.goto(APP_URL, wait_until="networkidle")
+    time.sleep(2)
+
+    # Ensure light mode
+    light_btn = page.query_selector('button:has-text("Light Mode")')
+    if light_btn:
+        light_btn.click()
+        time.sleep(1.5)
+
+    inp = page.wait_for_selector('input[data-testid="stTextInputField"]')
+    inp.fill(question_text)
+    time.sleep(0.5)
+    inp.press("Enter")
+
+    # Wait for bot response to render
+    time.sleep(6.5)
+
+    page.screenshot(path=str(SCREENSHOTS_DIR / output_filename))
+    print(f"✅ Saved {output_filename}")
+
+
 def capture_all():
-    print("📸 Starting live screenshot capture from Streamlit...")
+    print("📸 Starting live UI screenshot capture from Streamlit...")
     with sync_playwright() as p:
-        browser = p.chromium.launch(
-            executable_path=CHROME_PATH,
-            headless=True,
-        )
-        context = browser.new_context(viewport={"width": 1366, "height": 920})
+        browser = p.chromium.launch(executable_path=CHROME_PATH, headless=True)
+        context = browser.new_context(viewport={"width": 1280, "height": 880})
         page = context.new_page()
 
-        # 1. Capture Home Screen
-        print("Capturing 01_home_screen.png...")
+        # 1. Capture 01_home_screen.png and light_mode_ui.png
+        print("\nCapturing 01_home_screen.png & light_mode_ui.png...")
         page.goto(APP_URL, wait_until="networkidle")
-        time.sleep(3)
+        time.sleep(2.5)
+
+        # Ensure light mode
+        light_btn = page.query_selector('button:has-text("Light Mode")')
+        if light_btn:
+            light_btn.click()
+            time.sleep(2)
+
         page.screenshot(path=str(SCREENSHOTS_DIR / "01_home_screen.png"))
-        print("✅ Saved 01_home_screen.png")
+        page.screenshot(path=str(SCREENSHOTS_DIR / "light_mode_ui.png"))
+        page.screenshot(path=str(SCREENSHOTS_DIR / "app_ui.png"))
+        page.screenshot(path=str(SCREENSHOTS_DIR / "current_live_ui.png"))
+        print("✅ Saved 01_home_screen.png, light_mode_ui.png, app_ui.png")
 
-        # 2-6. Capture Each Question
-        for tc in TEST_CASES:
-            fname = tc["filename"]
-            btn_txt = tc["btn_text"]
-            q = tc["question"]
-            print(f"\nProcessing '{btn_txt}' -> {fname}...")
+        # 2. Capture Dark Mode
+        print("\nCapturing dark_mode_ui.png & 08_dark_mode_interface.png...")
+        dark_btn = page.query_selector('button:has-text("Dark Mode")')
+        if dark_btn:
+            dark_btn.click()
+            time.sleep(2.5)
+            page.screenshot(path=str(SCREENSHOTS_DIR / "dark_mode_ui.png"))
+            page.screenshot(path=str(SCREENSHOTS_DIR / "08_dark_mode_interface.png"))
+            print("✅ Saved dark_mode_ui.png & 08_dark_mode_interface.png")
 
-            # Reset / goto page to guarantee fresh state
-            page.goto(APP_URL, wait_until="networkidle")
-            time.sleep(1.5)
-
-            # Click preset button
-            page.locator(f"button:has-text('{btn_txt}')").click()
-            time.sleep(1.5)
-
-            # Click Ask Question submit button
-            page.locator("button:has-text('Ask Question')").click()
-
-            # Wait for answer card to appear
-            try:
-                page.wait_for_selector(".answer-card", timeout=20000)
+            # Reset back to light mode
+            light_btn = page.query_selector('button:has-text("Light Mode")')
+            if light_btn:
+                light_btn.click()
                 time.sleep(2)
-            except Exception as e:
-                print(f"⚠️ Wait timeout for {fname}: {e}")
-                time.sleep(5)
 
-            page.screenshot(path=str(SCREENSHOTS_DIR / fname))
-            print(f"✅ Saved {fname}")
+        # 3. Capture Each Test Case Question
+        for tc in TEST_CASES:
+            ask_question_and_capture(page, tc["question"], tc["filename"])
 
-            # For Q1, also capture the expanded source reference excerpt
-            if "privilege_leave" in fname:
-                print("Capturing 07_source_reference_excerpt.png...")
-                time.sleep(1)
-                page.evaluate("window.scrollBy(0, 320)")
-                time.sleep(1.5)
-                page.screenshot(path=str(SCREENSHOTS_DIR / "07_source_reference_excerpt.png"))
-                print("✅ Saved 07_source_reference_excerpt.png")
+        # 4. Capture not_found_ui.png
+        print("\nCapturing not_found_ui.png...")
+        ask_question_and_capture(
+            page,
+            "What is the corporate income tax rate in India?",
+            "not_found_ui.png",
+        )
+
+        # 5. Capture close-up of source reference subcard
+        print("\nCapturing 07_source_reference_excerpt.png...")
+        page.goto(APP_URL, wait_until="networkidle")
+        time.sleep(2)
+        ref_card = page.query_selector(".reference-subcard")
+        if ref_card:
+            ref_card.screenshot(path=str(SCREENSHOTS_DIR / "07_source_reference_excerpt.png"))
+            print("✅ Saved 07_source_reference_excerpt.png (element screenshot)")
+        else:
+            page.screenshot(path=str(SCREENSHOTS_DIR / "07_source_reference_excerpt.png"))
 
         browser.close()
-        print("\n🎉 All 7 genuine screenshots successfully captured and saved to screenshots/!")
+
+    print("\n🎉 All current UI screenshots updated successfully in screenshots/ folder!")
 
 
 if __name__ == "__main__":
